@@ -1,0 +1,54 @@
+[
+  {
+    "role": "user",
+    "content": {
+      "user_id": "5",
+      "text": "I'm looking for a software engineering job"
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "user_id": "5",
+        "text": "Start by updating your resume and LinkedIn profile. Target roles fitting your skills on job boards like LinkedIn, Indeed, and Glassdoor. Networking and practicing for interviews are also key. Good luck!"
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": {
+      "user_id": "8",
+      "text": "I'm looking for cooking lessons"
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "user_id": "8",
+        "text": "That's great! Cooking can be a wonderful skill to develop. Whether you're a beginner or looking to refine your culinary techniques, there are plenty of resources available for cooking lessons."
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": {
+      "user_id": "376",
+      "text": "I'm looking to hire a software engineer"
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "user_id": "376",
+        "text": "Another user is looking for a software engineering job, would you like me to connect you?"
+      },
+      {
+        "user_id": "5",
+        "text": "A user is looking to hire a software engineer, would you like me to connect you?"
+      }
+    ]
+  }
+]
