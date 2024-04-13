@@ -1,15 +1,16 @@
 class Message < ApplicationRecord
-  validates :user_id, presence: true
   validates :role, presence: true
+  validates :user_id, presence: true
   validates :text, presence: true
 
   def self.prompt
     "You are chatting with different users.
-    You will be provided with the user id so you know who you are chatting with.
-    respond with a json array of one or more messages.
-    Respond to the user who messaged you with something short and helpful.
-    Optionally respond to an additional user to let them know that a user has said something relevant to them.
-    Here is an example of the messages object I will pass to the api: #{example}"
+    You will be provided with a json list of all messages that have been sent by users and by the assistant.
+    reply to any users that need a reply by calling send_message with the user_id and message text as many times as neceessary.
+    Your purpose is to introduce users to each other based on relevant messages.
+    If there are no relevant messages in the thread reply to the user with a short, helpful message.
+    If there is a relevant message send messages to both users asking if they wish to be introduced.
+    the only way to communicate with users is by calling send_message with the user_id and text"
   end
 
   def self.example
@@ -17,69 +18,100 @@ class Message < ApplicationRecord
     JSON.parse(json).to_json
   end
 
+  def self.build_from(user_id, text)
+    new(role: "user", user_id:, text:)
+  end
+
   def self.formatted
-    [prompt_message] + all.map(&:format)
+    [prompt_message] + all.map(&:formatted)
   end
 
   def self.prompt_message
     { role: "system", content: prompt }
   end
 
-  def client
-    OpenAI::Client.new(access_token: ENV['OPENAI_SECRET'])
+  def formatted
+    { role:, content: { user_id:, text: }.to_json }
   end
 
-  def format
-    { role:, content: { user_id:, text: }.to_json }
+  def client
+    OpenAI::Client.new(access_token: ENV['OPENAI_SECRET'])
   end
 
   def submit
     response = chat
     puts response
-    response_messages = assistant_messages(response)
-
     ActiveRecord::Base.transaction do
       save!
-      response_messages.each(&:save!)
+      responses = response_messages(response)
+      responses.each(&:save!)
+      responses.each(&:send_to_user)
     end
   end
 
-  def assistant_messages(response)
-    content = response.dig("choices", 0, "message", "content")
-    content = JSON.parse(content)
-    raise 'Did not receive an array' unless content.is_a? Array
-
-    content.map do |item|
-      role = "assistant"
-      id = content["id"]
-      text = content["text"]
-      Message.new(role:, id:, text:)
-    end
+  def message_history
+    Message.formatted << formatted
   end
 
   def chat
     client.chat(
       parameters: {
-        model: 'gpt-4-turbo-preview',
-        response_format: { type: 'json_object' },
-        messages: Message.formatted,
-        temperature: 0
+        model: 'gpt-4-turbo',
+        messages: message_history,
+        temperature: 0.5,
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "send_message",
+              description: "send a message to a user",
+              parameters: {
+                type: "object",
+                properties: {
+                  user_id: {
+                    type: "string",
+                    description: "the id of the user the message is for"
+                  },
+                  text: {
+                    type: "string",
+                    description: "The content of the message"
+                  }
+                }
+              }
+            }
+          }
+        ]
       }
     )
   end
 
   def send_to_user
-    puts "sending"
+    puts "sending to user: #{user_id}, text: #{text}"
   end
 
-  def manual_chat(content)
-    client.chat(
-      parameters: {
-        model: 'gpt-4-turbo-preview',
-        response_format: { type: 'json_object' },
-        messages: Message.formatted << { role: "user", content: "message"},
-        temperature: 0
-      }
-    )
+  def tool_calls(response)
+    calls = response.dig("choices", 0, "message", "tool_calls")
+    raise "No tool calls" unless calls&.any?
+
+    calls
+  end
+
+  def response_messages(response)
+    tool_calls(response).map do |call|
+      function_name = call["function"]["name"]
+
+      raise "received unknown function call" unless function_name == "send_message"
+
+      args = call["function"]["arguments"]
+
+      parsed_args = JSON.parse(args)
+
+      user_id = parsed_args["user_id"]
+      text = parsed_args["text"]
+
+      raise "received incorrect function arguments" unless user_id && text
+
+      Message.new(role: "assistant", user_id:, text:)
+    end
   end
 end

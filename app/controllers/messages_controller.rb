@@ -3,8 +3,9 @@ class MessagesController < ApplicationController
     role = "user"
     user_id = params["message"]["from"]["id"].to_s
     text = params["message"]["text"]
+    content = { user_id:, text: }.as_json
 
-    message = Message.new(role:, user_id:, text: )
+    message = Message.new(role:, content:)
 
     message.submit
 
