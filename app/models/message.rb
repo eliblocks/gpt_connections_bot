@@ -4,11 +4,11 @@ class Message < ApplicationRecord
   validates :text, presence: true
 
   def self.prompt
-"You are chatting with different user_ids. \
+"You are chatting with different users. \
 Your purpose is to introduce users to each other based on relevant messages. \
 If there are no relevant messages in the thread reply to the user with a short, helpful message. \
 If there is a relevant message send messages to both users asking if they wish to be introduced. \
-respond with a json array of messages you want to send. Example: { 88823: hello }"
+Example: { role: user, content: { 514: hello } }, role: assistant, content: { 514: hi! }."
   end
 
   def self.example
@@ -24,12 +24,16 @@ respond with a json array of messages you want to send. Example: { 88823: hello 
     { role: "system", content: prompt }
   end
 
+  def self.chat(user_id, text)
+    new(role: "user", user_id:, text:).submit
+  end
+
   def client
     OpenAI::Client.new(access_token: ENV['OPENAI_SECRET'])
   end
 
   def formatted
-    { role:, content: { user_id => text }.to_json }
+    { role:, content: "#{user_id}: #{text}" }
   end
 
   def message_history
@@ -48,14 +52,16 @@ respond with a json array of messages you want to send. Example: { 88823: hello 
       save!
       response_messages.each(&:save!)
     end
+
+    response_messages.each(&:send_to_user)
   end
 
   def assistant_messages(response)
     content = response.dig("choices", 0, "message", "content")
-    content = JSON.parse(content)
-
-    content.keys.map do |key|
-      Message.new(role: "assistant", user_id: key, text: content[key])
+    messages = content.split("\n\n")
+    messages.map do |message|
+      match = message.match(/\A(.+): (.+)/)
+      Message.new(role: "assistant", user_id: match[1], text: match[2])
     end
   end
 
@@ -63,7 +69,6 @@ respond with a json array of messages you want to send. Example: { 88823: hello 
     client.chat(
       parameters: {
         model: 'gpt-4-turbo',
-        response_format: { type: 'json_object' },
         messages: message_history,
         temperature: 0.5
       }
@@ -72,16 +77,5 @@ respond with a json array of messages you want to send. Example: { 88823: hello 
 
   def send_to_user
     puts "sending"
-  end
-
-  def manual_chat(content)
-    client.chat(
-      parameters: {
-        model: 'gpt-4-turbo',
-        response_format: { type: 'json_object' },
-        messages: Message.formatted << { role: "user", content: "message"},
-        temperature: 0
-      }
-    )
   end
 end
