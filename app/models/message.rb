@@ -4,12 +4,11 @@ class Message < ApplicationRecord
   validates :text, presence: true
 
   def self.prompt
-    "You are chatting with different users.
-    You will be provided with the user id so you know who you are chatting with.
-    respond with a json array of one or more messages.
-    Respond to the user who messaged you with something short and helpful.
-    Optionally respond to an additional user to let them know that a user has said something relevant to them.
-    Here is an example of the messages object I will pass to the api: #{example}"
+"You are chatting with different user_ids. \
+Your purpose is to introduce users to each other based on relevant messages. \
+If there are no relevant messages in the thread reply to the user with a short, helpful message. \
+If there is a relevant message send messages to both users asking if they wish to be introduced. \
+respond with a json array of messages you want to send. Example: { 88823: hello }"
   end
 
   def self.example
@@ -18,7 +17,7 @@ class Message < ApplicationRecord
   end
 
   def self.formatted
-    [prompt_message] + all.map(&:format)
+    [prompt_message] + all.map(&:formatted)
   end
 
   def self.prompt_message
@@ -29,12 +28,19 @@ class Message < ApplicationRecord
     OpenAI::Client.new(access_token: ENV['OPENAI_SECRET'])
   end
 
-  def format
-    { role:, content: { user_id:, text: }.to_json }
+  def formatted
+    { role:, content: { user_id => text }.to_json }
+  end
+
+  def message_history
+    Message.formatted << formatted
   end
 
   def submit
+    puts "SENDING:"
+    puts message_history
     response = chat
+    puts "RECEIVED:"
     puts response
     response_messages = assistant_messages(response)
 
@@ -47,23 +53,19 @@ class Message < ApplicationRecord
   def assistant_messages(response)
     content = response.dig("choices", 0, "message", "content")
     content = JSON.parse(content)
-    raise 'Did not receive an array' unless content.is_a? Array
 
-    content.map do |item|
-      role = "assistant"
-      id = content["id"]
-      text = content["text"]
-      Message.new(role:, id:, text:)
+    content.keys.map do |key|
+      Message.new(role: "assistant", user_id: key, text: content[key])
     end
   end
 
   def chat
     client.chat(
       parameters: {
-        model: 'gpt-4-turbo-preview',
+        model: 'gpt-4-turbo',
         response_format: { type: 'json_object' },
-        messages: Message.formatted,
-        temperature: 0
+        messages: message_history,
+        temperature: 0.5
       }
     )
   end
@@ -75,7 +77,7 @@ class Message < ApplicationRecord
   def manual_chat(content)
     client.chat(
       parameters: {
-        model: 'gpt-4-turbo-preview',
+        model: 'gpt-4-turbo',
         response_format: { type: 'json_object' },
         messages: Message.formatted << { role: "user", content: "message"},
         temperature: 0
