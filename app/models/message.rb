@@ -83,7 +83,7 @@ Example JSON: { 88823: hello }."
     url = "https://api.telegram.org/bot#{token}/sendMessage"
     Net::HTTP.post(
       URI(url),
-      { "message" => text, "chat_id" => user_id }.to_json,
+      { "text" => text, "chat_id" => user_id }.to_json,
       "Content-Type" => "application/json"
     )
   end
