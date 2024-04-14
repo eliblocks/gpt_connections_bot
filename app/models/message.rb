@@ -1,14 +1,15 @@
+require 'net/http'
 class Message < ApplicationRecord
   validates :user_id, presence: true
   validates :role, presence: true
   validates :text, presence: true
 
   def self.prompt
-"You are chatting with different user_ids. \
+"You are chatting with different users. \
 Your purpose is to introduce users to each other based on relevant messages. \
 If there are no relevant messages in the thread reply to the user with a short, helpful message. \
 If there is a relevant message send messages to both users asking if they wish to be introduced. \
-respond with a json array of messages you want to send. Example: { 88823: hello }"
+Example JSON: { 88823: hello }."
   end
 
   def self.example
@@ -22,6 +23,10 @@ respond with a json array of messages you want to send. Example: { 88823: hello 
 
   def self.prompt_message
     { role: "system", content: prompt }
+  end
+
+  def self.chat(user_id, text)
+    new(role: "user", user_id:, text:).submit
   end
 
   def client
@@ -48,6 +53,8 @@ respond with a json array of messages you want to send. Example: { 88823: hello 
       save!
       response_messages.each(&:save!)
     end
+
+    response_messages.each(&:send_to_user)
   end
 
   def assistant_messages(response)
@@ -71,17 +78,13 @@ respond with a json array of messages you want to send. Example: { 88823: hello 
   end
 
   def send_to_user
-    puts "sending"
-  end
+    token = ENV['TELEGRAM_TOKEN']
 
-  def manual_chat(content)
-    client.chat(
-      parameters: {
-        model: 'gpt-4-turbo',
-        response_format: { type: 'json_object' },
-        messages: Message.formatted << { role: "user", content: "message"},
-        temperature: 0
-      }
+    url = "https://api.telegram.org/bot#{token}/sendMessage"
+    Net::HTTP.post(
+      URI(url),
+      { "message" => text, "chat_id" => user_id }.to_json,
+      "Content-Type" => "application/json"
     )
   end
 end
